@@ -40,13 +40,7 @@ export default function UsersAdmin() {
         <p className="text-gray-500 dark:text-gray-400 text-sm">Gérez les rôles de l'équipe (admin, caissier, employé)</p>
       </div>
 
-      <div className="card p-4 bg-brand-50 dark:bg-brand-500/10 flex gap-3">
-        <Info size={18} className="text-brand-600 dark:text-brand-400 shrink-0 mt-0.5" />
-        <p className="text-sm text-brand-700 dark:text-brand-300">
-          Pour créer un nouveau compte (caissier, employé), rendez-vous dans <strong>Supabase → Authentication → Users → Add user</strong>,
-          puis attribuez-lui un rôle ici. Cette approche garde vos identifiants d'administration en sécurité côté serveur.
-        </p>
-      </div>
+      
 
       <div className="relative max-w-md">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
