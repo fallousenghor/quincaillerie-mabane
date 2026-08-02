@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react'
-import { Plus, Trash2, ShoppingCart, Download, MessageCircle, Eye, Search, Receipt, FileText, RotateCcw, CreditCard, Wallet } from 'lucide-react'
+import { useEffect, useState, useMemo, useRef } from 'react'
+import { Plus, Trash2, ShoppingCart, Download, MessageCircle, Eye, Search, Receipt, FileText, RotateCcw, CreditCard, Wallet, ChevronDown, Check } from 'lucide-react'
 import { useProducts } from '../../hooks/useProducts'
 import { useClients } from '../../hooks/useEntities'
 import { useSales, useCreateSale, useCancelSale, useAddSalePayment } from '../../hooks/useSales'
@@ -91,6 +91,110 @@ function ActionButton({ icon: Icon, title, onClick, disabled, tone = 'gray' }) {
     >
       <Icon size={15} />
     </button>
+  )
+}
+
+const defaultOptionLabel = (option) => option.label
+const defaultSearchText = (option) => option.searchText || option.label
+
+function SearchableSelect({ value, onChange, options, placeholder, getOptionLabel = defaultOptionLabel, getSearchText = defaultSearchText, emptyMessage = 'Aucun résultat' }) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const wrapperRef = useRef(null)
+
+  const selectedOption = useMemo(() => options.find((option) => option.value === value), [options, value])
+
+  useEffect(() => {
+    setQuery(selectedOption ? getOptionLabel(selectedOption) : '')
+  }, [selectedOption, getOptionLabel])
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!wrapperRef.current?.contains(event.target)) setOpen(false)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const filteredOptions = useMemo(() => {
+    if (!normalizedQuery || (selectedOption && query === getOptionLabel(selectedOption))) return options
+    return options.filter((option) => getSearchText(option).toLowerCase().includes(normalizedQuery))
+  }, [getOptionLabel, getSearchText, normalizedQuery, options, query, selectedOption])
+
+  const visibleOptions = filteredOptions.slice(0, 80)
+
+  const handleSelect = (option) => {
+    if (option.disabled) return
+    onChange(option.value)
+    setQuery(getOptionLabel(option))
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative" ref={wrapperRef}>
+      <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+      <input
+        type="text"
+        className="input pl-9 pr-9"
+        value={query}
+        placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          setOpen(true)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false)
+            return
+          }
+          if (e.key !== 'Enter' || !open) return
+
+          e.preventDefault()
+          const firstAvailableOption = visibleOptions.find((option) => !option.disabled)
+          if (firstAvailableOption) handleSelect(firstAvailableOption)
+        }}
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+        onClick={() => setOpen((current) => !current)}
+        aria-label="Afficher la liste"
+      >
+        <ChevronDown size={16} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg">
+          <div className="max-h-64 overflow-y-auto py-1">
+            {visibleOptions.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-gray-400">{emptyMessage}</p>
+            ) : (
+              visibleOptions.map((option) => (
+                <button
+                  key={option.value || 'empty-option'}
+                  type="button"
+                  disabled={option.disabled}
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-45"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => handleSelect(option)}
+                >
+                  <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center text-brand-600">
+                    {option.value === value && <Check size={14} />}
+                  </span>
+                  <span className="min-w-0 flex-1">{option.content || getOptionLabel(option)}</span>
+                </button>
+              ))
+            )}
+            {filteredOptions.length > visibleOptions.length && (
+              <p className="px-3 py-2 text-xs text-gray-400">Affinez la recherche pour voir plus de résultats.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -246,6 +350,44 @@ export default function Sales() {
   const totalDette = sales
     .filter((s) => s.status !== 'annulee')
     .reduce((sum, s) => sum + (Number(s.total) - Number(s.amount_paid)), 0)
+
+  const clientOptions = useMemo(
+    () => [
+      { value: '', label: 'Client comptoir (sans nom)', searchText: 'client comptoir sans nom' },
+      ...clients.map((client) => ({
+        value: client.id,
+        label: `${client.name}${client.phone ? ` - ${client.phone}` : ''}`,
+        searchText: `${client.name || ''} ${client.phone || ''}`,
+        content: (
+          <span className="min-w-0">
+            <span className="block truncate font-medium">{client.name}</span>
+            {client.phone && <span className="block truncate text-xs text-gray-400">{client.phone}</span>}
+          </span>
+        ),
+      })),
+    ],
+    [clients]
+  )
+
+  const productOptions = useMemo(
+    () =>
+      products.map((product) => ({
+        value: product.id,
+        label: `${product.name} - ${currency(product.sale_price)} (stock: ${product.stock})`,
+        searchText: `${product.name || ''} ${product.sale_price || ''} ${product.stock || ''}`,
+        disabled: Number(product.stock) <= 0,
+        content: (
+          <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+            <span className="min-w-0">
+              <span className="block truncate font-medium">{product.name}</span>
+              <span className="block truncate text-xs text-gray-400">Stock: {product.stock}</span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-300">{currency(product.sale_price)}</span>
+          </span>
+        ),
+      })),
+    [products]
+  )
 
   return (
     <div className="space-y-6">
@@ -486,23 +628,25 @@ export default function Sales() {
 
           <div>
             <label className="label">Client (optionnel)</label>
-            <select className="input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
-              <option value="">Client comptoir (sans nom)</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              value={clientId}
+              onChange={setClientId}
+              options={clientOptions}
+              placeholder="Rechercher un client..."
+              emptyMessage="Aucun client trouvé"
+            />
           </div>
 
           <div className="flex gap-2">
-            <select className="input" value={productToAdd} onChange={(e) => setProductToAdd(e.target.value)}>
-              <option value="">Sélectionner un produit...</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
-                  {p.name} — {currency(p.sale_price)} (stock: {p.stock})
-                </option>
-              ))}
-            </select>
+            <div className="flex-1 min-w-0">
+              <SearchableSelect
+                value={productToAdd}
+                onChange={setProductToAdd}
+                options={productOptions}
+                placeholder="Rechercher un produit..."
+                emptyMessage="Aucun produit trouvé"
+              />
+            </div>
             <button type="button" className="btn-secondary shrink-0" onClick={addProduct}>
               <Plus size={16} /> Ajouter
             </button>
