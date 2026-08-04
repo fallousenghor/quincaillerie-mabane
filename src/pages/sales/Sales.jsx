@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
-import { Plus, Trash2, ShoppingCart, Download, MessageCircle, Eye, Search, Receipt, FileText, RotateCcw, CreditCard, Wallet, ChevronDown, Check } from 'lucide-react'
+import { Plus, Trash2, Edit, ShoppingCart, Download, MessageCircle, Eye, Search, Receipt, FileText, RotateCcw, CreditCard, Wallet, ChevronDown, Check } from 'lucide-react'
 import { useProducts } from '../../hooks/useProducts'
 import { useClients } from '../../hooks/useEntities'
-import { useSales, useCreateSale, useCancelSale, useAddSalePayment } from '../../hooks/useSales'
+import { useSales, useCreateSale, useCancelSale, useAddSalePayment, useUpdateSale, useDeleteSale, useUpdateSaleItems } from '../../hooks/useSales'
 import { useAuth } from '../../context/AuthContext'
 import Pagination from '../../components/Pagination'
 import Modal from '../../components/Modal'
@@ -206,10 +206,18 @@ export default function Sales() {
   const createSale = useCreateSale()
   const cancelSale = useCancelSale()
   const addPayment = useAddSalePayment()
+  const updateSale = useUpdateSale()
+  const updateSaleItems = useUpdateSaleItems()
+  const deleteSale = useDeleteSale()
 
   const [newSaleOpen, setNewSaleOpen] = useState(false)
   const [detailSale, setDetailSale] = useState(null)
+  const [editSale, setEditSale] = useState(null)
+  const [editClientId, setEditClientId] = useState('')
+  const [editDiscount, setEditDiscount] = useState(0)
+  const [editSaleItems, setEditSaleItems] = useState([])
   const [confirmCancel, setConfirmCancel] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [paymentOpen, setPaymentOpen] = useState(null)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentError, setPaymentError] = useState('')
@@ -329,6 +337,62 @@ export default function Sales() {
     setConfirmCancel(null)
     if (detailSale?.id === confirmCancel.id) {
       setDetailSale((sale) => ({ ...sale, status: 'annulee' }))
+    }
+  }
+
+  const handleUpdateSale = async (e) => {
+    e.preventDefault()
+    if (!editSale) return
+    try {
+      // Update sale items first (if they changed)
+      if (editSaleItems.length > 0) {
+        const itemsToUpdate = editSaleItems.map(item => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          purchase_price: item.purchase_price || 0,
+        }))
+        await updateSaleItems.mutateAsync({ saleId: editSale.id, items: itemsToUpdate })
+      }
+      // Then update client and discount if changed
+      await updateSale.mutateAsync({ saleId: editSale.id, clientId: editClientId || null, discount: Number(editDiscount) || 0 })
+      setEditSale(null)
+      // refresh detail view if open
+      if (detailSale?.id === editSale.id) {
+        setDetailSale(null) // Force refresh by closing detail
+      }
+    } catch (err) {
+      alert(err.message || 'Erreur lors de la mise à jour de la facture')
+    }
+  }
+
+  const handleEditSaleItemQuantity = (itemId, newQuantity) => {
+    setEditSaleItems(items => 
+      items.map(item => 
+        item.id === itemId 
+          ? { ...item, quantity: Math.max(1, newQuantity) }
+          : item
+      )
+    )
+  }
+
+  const handleRemoveEditSaleItem = (itemId) => {
+    if (editSaleItems.length === 1) {
+      alert('Une facture doit contenir au moins un article.')
+      return
+    }
+    setEditSaleItems(items => items.filter(item => item.id !== itemId))
+  }
+
+  const handleDeleteSale = async () => {
+    if (!confirmDelete) return
+    try {
+      await deleteSale.mutateAsync(confirmDelete.id)
+      if (detailSale?.id === confirmDelete.id) setDetailSale(null)
+      setConfirmDelete(null)
+    } catch (err) {
+      alert(err.message || 'Erreur lors de la suppression')
     }
   }
 
@@ -547,6 +611,21 @@ export default function Sales() {
                             {isAdmin && s.status !== 'annulee' && (
                               <ActionButton icon={RotateCcw} title="Annuler et remettre en stock" onClick={() => setConfirmCancel(s)} tone="red" />
                             )}
+                            {isAdmin && s.status !== 'annulee' && (
+                              <ActionButton
+                                icon={Edit}
+                                title="Modifier la facture"
+                                onClick={() => {
+                                  setEditSale(s)
+                                  setEditClientId(s.client_id || '')
+                                  setEditDiscount(s.discount || 0)
+                                  setEditSaleItems(s.sale_items || [])
+                                }}
+                              />
+                            )}
+                            {isAdmin && s.status === 'annulee' && (
+                              <ActionButton icon={Trash2} title="Supprimer la facture" onClick={() => setConfirmDelete(s)} tone="red" />
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -609,6 +688,12 @@ export default function Sales() {
                       />
                       {isAdmin && s.status !== 'annulee' && (
                         <ActionButton icon={RotateCcw} title="Annuler" onClick={() => setConfirmCancel(s)} tone="red" />
+                      )}
+                      {isAdmin && s.status !== 'annulee' && (
+                        <ActionButton icon={Edit} title="Modifier" onClick={() => { setEditSale(s); setEditClientId(s.client_id || ''); setEditDiscount(s.discount || 0); setEditSaleItems(s.sale_items || []) }} />
+                      )}
+                      {isAdmin && s.status === 'annulee' && (
+                        <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(s)} tone="red" />
                       )}
                     </div>
                   </div>
@@ -724,6 +809,92 @@ export default function Sales() {
           </div>
         </form>
       </Modal>
+
+      {/* ---- Modal: modifier une facture (client, remise, articles) ---- */}
+      <Modal open={!!editSale} onClose={() => setEditSale(null)} title={`Modifier facture ${editSale?.invoice_number || ''}`} maxWidth="max-w-2xl">
+        {editSale && (
+          <form onSubmit={handleUpdateSale} className="space-y-4">
+            <div>
+              <label className="label">Client (optionnel)</label>
+              <SearchableSelect
+                value={editClientId}
+                onChange={setEditClientId}
+                options={clientOptions}
+                placeholder="Rechercher un client..."
+                emptyMessage="Aucun client trouvé"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="label">Articles de la facture</label>
+              <div className="border border-gray-200 dark:border-gray-700/60 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+                {editSaleItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 p-3">Aucun article</p>
+                ) : (
+                  editSaleItems.map(item => (
+                    <div key={item.id} className="flex items-center gap-3 p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.product_name}</p>
+                        <p className="text-xs text-gray-400">{currency(item.unit_price)} / unité</p>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        className="input w-20 text-center"
+                        value={item.quantity}
+                        onChange={(e) => handleEditSaleItemQuantity(item.id, Number(e.target.value))}
+                      />
+                      <p className="w-24 text-right text-sm font-semibold">{currency(item.quantity * item.unit_price)}</p>
+                      <button
+                        type="button"
+                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg"
+                        onClick={() => handleRemoveEditSaleItem(item.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Remise (FCFA)</label>
+              <input type="number" min="0" className="input" value={editDiscount} onChange={(e) => setEditDiscount(e.target.value)} />
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700/60 pt-3 space-y-1">
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>Sous-total</span>
+                <span>{currency(editSaleItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0))}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-500">
+                <span>Remise</span>
+                <span>-{currency(editDiscount)}</span>
+              </div>
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>{currency(Math.max(0, editSaleItems.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) - Number(editDiscount || 0)))}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="btn-secondary" onClick={() => setEditSale(null)}>Annuler</button>
+              <button type="submit" className="btn-primary" disabled={updateSaleItems.isPending || updateSale.isPending}>
+                {updateSaleItems.isPending || updateSale.isPending ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDeleteSale}
+        loading={deleteSale.isPending}
+        message={`Supprimer la facture "${confirmDelete?.invoice_number}" ? Cette action est irréversible.`}
+      />
 
       {/* ---- Modal: détail vente ---- */}
       <Modal open={!!detailSale} onClose={() => setDetailSale(null)} title={`Facture ${detailSale?.invoice_number || ''}`} maxWidth="max-w-lg">

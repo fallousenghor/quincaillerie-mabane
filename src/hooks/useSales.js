@@ -164,3 +164,59 @@ export function useDeleteStockMovement() {
     },
   })
 }
+
+export function useUpdateSale() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ saleId, clientId, discount }) => {
+      const { data, error } = await supabase
+        .from('sales')
+        .update({ client_id: clientId || null, discount: discount || 0 })
+        .eq('id', saleId)
+        .select()
+        .single()
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useUpdateSaleItems() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ saleId, items }) => {
+      const { data, error } = await supabase.rpc('update_sale_items', {
+        p_sale_id: saleId,
+        p_items: items,
+      })
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['stock_movements'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDeleteSale() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (saleId) => {
+      const { error } = await supabase.from('sales').delete().eq('id', saleId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['stock_movements'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
