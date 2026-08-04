@@ -101,3 +101,4 @@ Le dossier `dist/` peut être déployé sur Vercel, Netlify, ou tout hébergeur 
 ## 📞 Contact Quincaillerie Mabane
 Mamadou Faye (Momo Faye) — Diouroup, Sénégal
 +221 77 845 28 72 · +221 78 213 33 12 · +221 77 979 20 90
+dev-gallas98 : supabase

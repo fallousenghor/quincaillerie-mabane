@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Plus, ArrowUpRight, ArrowDownRight, Search, Package, History, AlertTriangle } from 'lucide-react'
+import { Plus, ArrowUpRight, ArrowDownRight, Search, Package, History, AlertTriangle, Eye, Pencil, Trash2 } from 'lucide-react'
 import { useProducts } from '../../hooks/useProducts'
-import { useStockMovements, useAddStockEntry } from '../../hooks/useSales'
+import { useStockMovements, useAddStockEntry, useUpdateStockMovement, useDeleteStockMovement } from '../../hooks/useSales'
 import { useAuth } from '../../context/AuthContext'
 import Modal from '../../components/Modal'
+import ConfirmDialog from '../../components/ConfirmDialog'
 import Pagination from '../../components/Pagination'
 
 // --- Helpers d'affichage ---
@@ -47,16 +48,35 @@ function QuantitySigned({ type, quantity }) {
   )
 }
 
+function ActionButton({ icon: Icon, title, onClick, tone = 'gray' }) {
+  const tones = {
+    gray: 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200',
+    red: 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10',
+  }
+  return (
+    <button type="button" title={title} onClick={onClick} className={`p-2 rounded-lg transition-colors ${tones[tone]}`}>
+      <Icon size={15} />
+    </button>
+  )
+}
+
 export default function Stock() {
   const { user } = useAuth()
   const { data: products = [] } = useProducts()
   const { data: movements = [], isLoading } = useStockMovements()
   const addEntry = useAddStockEntry()
+  const updateMovement = useUpdateStockMovement()
+  const deleteMovement = useDeleteStockMovement()
 
   const [modalOpen, setModalOpen] = useState(false)
+  const [detailMovement, setDetailMovement] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [productId, setProductId] = useState('')
+  const [movementType, setMovementType] = useState('entree')
   const [quantity, setQuantity] = useState('')
   const [reason, setReason] = useState('')
+  const [formError, setFormError] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const pageSize = 10
@@ -79,12 +99,60 @@ export default function Stock() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setFormError('')
     if (!productId || !quantity) return
-    await addEntry.mutateAsync({ productId, quantity: Number(quantity), reason, userId: user?.id })
-    setModalOpen(false)
+    try {
+      await addEntry.mutateAsync({ productId, quantity: Number(quantity), reason, userId: user?.id })
+      setModalOpen(false)
+      setProductId('')
+      setQuantity('')
+      setReason('')
+    } catch (err) {
+      setFormError(err.message)
+    }
+  }
+
+  const openEdit = (movement) => {
+    setEditing(movement)
+    setProductId(movement.product_id || '')
+    setMovementType(movement.type || 'entree')
+    setQuantity(movement.quantity || '')
+    setReason(movement.reason || '')
+    setFormError('')
+  }
+
+  const closeEdit = () => {
+    setEditing(null)
     setProductId('')
+    setMovementType('entree')
     setQuantity('')
     setReason('')
+    setFormError('')
+  }
+
+  const handleUpdate = async (e) => {
+    e.preventDefault()
+    setFormError('')
+    if (!editing || !productId || !quantity) return
+    try {
+      await updateMovement.mutateAsync({
+        movementId: editing.id,
+        productId,
+        type: movementType,
+        quantity: Number(quantity),
+        reason,
+        userId: user?.id,
+      })
+      closeEdit()
+    } catch (err) {
+      setFormError(err.message)
+    }
+  }
+
+  const handleDelete = async () => {
+    await deleteMovement.mutateAsync(confirmDelete.id)
+    if (detailMovement?.id === confirmDelete.id) setDetailMovement(null)
+    setConfirmDelete(null)
   }
 
   return (
@@ -187,6 +255,7 @@ export default function Stock() {
                     <th className="table-th text-right">Quantité</th>
                     <th className="table-th">Motif</th>
                     <th className="table-th">Date</th>
+                    <th className="table-th text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -212,6 +281,13 @@ export default function Stock() {
                       <td className="table-td">
                         <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{formatRelativeDate(m.created_at)}</span>
                       </td>
+                      <td className="table-td">
+                        <div className="flex justify-end gap-1">
+                          <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailMovement(m)} />
+                          <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(m)} />
+                          <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(m)} tone="red" />
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -222,7 +298,7 @@ export default function Stock() {
           {/* ---- Vue cartes (mobile) ---- */}
           <div className="md:hidden space-y-2.5">
             {paginatedMovements.map((m) => (
-              <div key={m.id} className="card p-4">
+              <div key={m.id} className="card p-4" onClick={() => setDetailMovement(m)}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="h-9 w-9 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 shrink-0">
@@ -237,7 +313,11 @@ export default function Stock() {
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                   <MovementTypeBadge type={m.type} />
-                  <span className="text-xs text-gray-400">{formatRelativeDate(m.created_at)}</span>
+                  <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <span className="text-xs text-gray-400 mr-1">{formatRelativeDate(m.created_at)}</span>
+                    <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(m)} />
+                    <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(m)} tone="red" />
+                  </div>
                 </div>
               </div>
             ))}
@@ -249,6 +329,7 @@ export default function Stock() {
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nouvelle entrée de stock">
         <form onSubmit={handleSubmit} className="space-y-4">
+          {formError && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2">{formError}</div>}
           <div>
             <label className="label">Produit</label>
             <select required className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
@@ -272,6 +353,92 @@ export default function Stock() {
           </div>
         </form>
       </Modal>
+
+      <Modal open={!!editing} onClose={closeEdit} title="Modifier le mouvement">
+        {editing && (
+          <form onSubmit={handleUpdate} className="space-y-4">
+            {formError && <div className="text-sm text-red-600 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2">{formError}</div>}
+            <div>
+              <label className="label">Produit</label>
+              <select required className="input" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                <option value="">Sélectionner un produit...</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name} (stock actuel: {p.stock})</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Type</label>
+                <select className="input" value={movementType} onChange={(e) => setMovementType(e.target.value)}>
+                  <option value="entree">Entrée</option>
+                  <option value="sortie">Sortie</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">Quantité</label>
+                <input type="number" min="1" required className="input" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <label className="label">Motif</label>
+              <input className="input" value={reason} onChange={(e) => setReason(e.target.value)} />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" className="btn-secondary" onClick={closeEdit}>Annuler</button>
+              <button type="submit" className="btn-primary" disabled={updateMovement.isPending}>
+                {updateMovement.isPending ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal open={!!detailMovement} onClose={() => setDetailMovement(null)} title="Détail du mouvement">
+        {detailMovement && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 shrink-0">
+                <Package size={18} />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{detailMovement.products?.name || '—'}</p>
+                <p className="text-xs text-gray-400">{formatRelativeDate(detailMovement.created_at)}</p>
+              </div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700/60 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="flex justify-between p-3 text-sm">
+                <span className="text-gray-500">Type</span>
+                <MovementTypeBadge type={detailMovement.type} />
+              </div>
+              <div className="flex justify-between p-3 text-sm">
+                <span className="text-gray-500">Quantité</span>
+                <QuantitySigned type={detailMovement.type} quantity={detailMovement.quantity} />
+              </div>
+              <div className="flex justify-between gap-4 p-3 text-sm">
+                <span className="text-gray-500">Motif</span>
+                <span className="text-right">{detailMovement.reason || '—'}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => { openEdit(detailMovement); setDetailMovement(null) }}>
+                <Pencil size={15} /> Modifier
+              </button>
+              <button className="btn-danger" onClick={() => setConfirmDelete(detailMovement)}>
+                <Trash2 size={15} /> Supprimer
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={handleDelete}
+        loading={deleteMovement.isPending}
+        message={`Supprimer ce mouvement de stock ? Le stock du produit sera automatiquement réajusté.`}
+      />
     </div>
   )
 }

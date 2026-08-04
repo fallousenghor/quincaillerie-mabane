@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, TrendingUp, TrendingDown, Wallet, FileSpreadsheet, Search, Receipt, Trash2 } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Wallet, FileSpreadsheet, Search, Receipt, Trash2, Pencil, Eye } from 'lucide-react'
 import { useExpenses } from '../../hooks/useEntities'
 import { useSales } from '../../hooks/useSales'
 import { useAuth } from '../../context/AuthContext'
@@ -57,11 +57,25 @@ function getSaleGrossMargin(sale) {
   return itemsMargin - Number(sale.discount || 0)
 }
 
+function ActionButton({ icon: Icon, title, onClick, tone = 'gray' }) {
+  const tones = {
+    gray: 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200',
+    red: 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10',
+  }
+  return (
+    <button type="button" title={title} onClick={onClick} className={`p-2 rounded-lg transition-colors ${tones[tone]}`}>
+      <Icon size={15} />
+    </button>
+  )
+}
+
 export default function Finances() {
   const { user } = useAuth()
-  const { data: expenses = [], isLoading, createItem, deleteItem } = useExpenses()
+  const { data: expenses = [], isLoading, createItem, updateItem, deleteItem } = useExpenses()
   const { data: sales = [] } = useSales()
   const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [detailExpense, setDetailExpense] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -88,15 +102,37 @@ export default function Finances() {
 
   const paginatedExpenses = filteredExpenses.slice((page - 1) * pageSize, page * pageSize)
 
+  const openCreate = () => {
+    setEditing(null)
+    setForm(emptyForm)
+    setModalOpen(true)
+  }
+
+  const openEdit = (expense) => {
+    setEditing(expense)
+    setForm({
+      label: expense.label || '',
+      amount: expense.amount || '',
+      category: expense.category || '',
+    })
+    setModalOpen(true)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
-    await createItem.mutateAsync({ ...form, amount: Number(form.amount), user_id: user?.id })
+    if (editing) {
+      await updateItem.mutateAsync({ id: editing.id, ...form, amount: Number(form.amount), user_id: user?.id })
+    } else {
+      await createItem.mutateAsync({ ...form, amount: Number(form.amount), user_id: user?.id })
+    }
     setModalOpen(false)
+    setEditing(null)
     setForm(emptyForm)
   }
 
   const handleDelete = async () => {
     await deleteItem.mutateAsync(confirmDelete.id)
+    if (detailExpense?.id === confirmDelete.id) setDetailExpense(null)
     setConfirmDelete(null)
   }
 
@@ -111,7 +147,7 @@ export default function Finances() {
           <button className="btn-secondary" onClick={() => exportSalesToExcel(sales)}>
             <FileSpreadsheet size={16} /> Export ventes
           </button>
-          <button className="btn-primary" onClick={() => setModalOpen(true)}>
+          <button className="btn-primary" onClick={openCreate}>
             <Plus size={16} /> Nouvelle dépense
           </button>
         </div>
@@ -168,7 +204,7 @@ export default function Finances() {
             <p className="font-medium">Aucune dépense enregistrée</p>
             <p className="text-sm text-gray-400 mt-0.5">Ajoutez vos dépenses pour suivre votre bénéfice réel.</p>
           </div>
-          <button className="btn-primary mt-1" onClick={() => setModalOpen(true)}>
+          <button className="btn-primary mt-1" onClick={openCreate}>
             <Plus size={16} /> Nouvelle dépense
           </button>
         </div>
@@ -222,14 +258,10 @@ export default function Finances() {
                         <span className="text-sm text-gray-500 dark:text-gray-400">{formatRelativeDate(e.created_at)}</span>
                       </td>
                       <td className="table-td">
-                        <div className="flex justify-end">
-                          <button
-                            className="p-2 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 transition-colors"
-                            title="Supprimer"
-                            onClick={() => setConfirmDelete(e)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                        <div className="flex justify-end gap-1">
+                          <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailExpense(e)} />
+                          <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(e)} />
+                          <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(e)} tone="red" />
                         </div>
                       </td>
                     </tr>
@@ -263,13 +295,11 @@ export default function Finances() {
                 </div>
                 <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                   <span className="text-xs text-gray-400">{formatRelativeDate(e.created_at)}</span>
-                  <button
-                    className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 transition-colors"
-                    title="Supprimer"
-                    onClick={() => setConfirmDelete(e)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex gap-1">
+                    <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailExpense(e)} />
+                    <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(e)} />
+                    <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(e)} tone="red" />
+                  </div>
                 </div>
               </div>
             ))}
@@ -279,7 +309,7 @@ export default function Finances() {
         </>
       )}
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nouvelle dépense">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Modifier la dépense' : 'Nouvelle dépense'}>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="label">Libellé</label>
@@ -295,9 +325,39 @@ export default function Finances() {
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className="btn-secondary" onClick={() => setModalOpen(false)}>Annuler</button>
-            <button type="submit" className="btn-primary" disabled={createItem.isPending}>Enregistrer</button>
+            <button type="submit" className="btn-primary" disabled={createItem.isPending || updateItem.isPending}>
+              {editing ? 'Enregistrer' : 'Créer'}
+            </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!detailExpense} onClose={() => setDetailExpense(null)} title="Détail de la dépense">
+        {detailExpense && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-red-50 dark:bg-red-500/10 flex items-center justify-center text-red-500 shrink-0">
+                <TrendingDown size={18} />
+              </div>
+              <div>
+                <p className="font-semibold">{detailExpense.label}</p>
+                <p className="text-xs text-gray-400">{formatRelativeDate(detailExpense.created_at)}</p>
+              </div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700/60 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Catégorie</span><CategoryBadge name={detailExpense.category} /></div>
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Montant</span><span className="font-semibold text-red-600 dark:text-red-400">-{currency(detailExpense.amount)}</span></div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => { openEdit(detailExpense); setDetailExpense(null) }}>
+                <Pencil size={15} /> Modifier
+              </button>
+              <button className="btn-danger" onClick={() => setConfirmDelete(detailExpense)}>
+                <Trash2 size={15} /> Supprimer
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog

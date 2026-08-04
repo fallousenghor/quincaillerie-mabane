@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2, Search, Package, ImagePlus, FileSpreadsheet, AlertTriangle, TrendingUp, Truck } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Package, ImagePlus, FileSpreadsheet, AlertTriangle, TrendingUp, Truck, Eye } from 'lucide-react'
 import { useProducts, uploadProductImage } from '../../hooks/useProducts'
 import { useCategories } from '../../hooks/useEntities'
 import { usePurchases } from '../../hooks/usePurchases'
@@ -120,6 +120,7 @@ export default function Products() {
   const { data: categories = [] } = useCategories()
   const { data: purchases = [] } = usePurchases()
   const [modalOpen, setModalOpen] = useState(false)
+  const [detailProduct, setDetailProduct] = useState(null)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -184,6 +185,7 @@ export default function Products() {
 
   const handleDelete = async () => {
     await deleteItem.mutateAsync(confirmDelete.id)
+    if (detailProduct?.id === confirmDelete.id) setDetailProduct(null)
     setConfirmDelete(null)
   }
 
@@ -326,6 +328,7 @@ export default function Products() {
                       </td>
                       <td className="table-td">
                         <div className="flex justify-end gap-1">
+                          <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailProduct(p)} />
                           <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(p)} />
                           <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(p)} tone="red" />
                         </div>
@@ -356,6 +359,7 @@ export default function Products() {
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0">
+                    <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailProduct(p)} />
                     <ActionButton icon={Pencil} title="Modifier" onClick={() => openEdit(p)} />
                     <ActionButton icon={Trash2} title="Supprimer" onClick={() => setConfirmDelete(p)} tone="red" />
                   </div>
@@ -470,6 +474,40 @@ export default function Products() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!detailProduct} onClose={() => setDetailProduct(null)} title="Détail du produit" maxWidth="max-w-lg">
+        {detailProduct && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              {detailProduct.image_url ? (
+                <img src={detailProduct.image_url} alt={detailProduct.name} className="h-14 w-14 rounded-lg object-cover shrink-0" />
+              ) : (
+                <div className="h-14 w-14 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 shrink-0">
+                  <Package size={22} />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-semibold truncate">{detailProduct.name}</p>
+                <CategoryBadge name={detailProduct.categories?.name} />
+              </div>
+            </div>
+            <div className="border border-gray-200 dark:border-gray-700/60 rounded-lg divide-y divide-gray-100 dark:divide-gray-800">
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Prix d'achat</span><span className="font-medium">{currency(detailProduct.purchase_price)}</span></div>
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Prix de vente</span><span className="font-medium">{currency(detailProduct.sale_price)}</span></div>
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Stock</span><StockBadge stock={detailProduct.stock} threshold={detailProduct.alert_threshold} unit={detailProduct.unit} /></div>
+              <div className="flex justify-between p-3 text-sm"><span className="text-gray-500">Seuil d'alerte</span><span>{detailProduct.alert_threshold} {detailProduct.unit || 'unité'}</span></div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => { openEdit(detailProduct); setDetailProduct(null) }}>
+                <Pencil size={15} /> Modifier
+              </button>
+              <button className="btn-danger" onClick={() => setConfirmDelete(detailProduct)}>
+                <Trash2 size={15} /> Supprimer
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog

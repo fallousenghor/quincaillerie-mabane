@@ -125,3 +125,42 @@ export function useAddStockEntry() {
     },
   })
 }
+
+export function useUpdateStockMovement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ movementId, productId, type, quantity, reason, userId }) => {
+      const { error } = await supabase.rpc('update_stock_movement', {
+        p_movement_id: movementId,
+        p_product_id: productId,
+        p_quantity: quantity,
+        p_reason: reason,
+        p_type: type,
+        p_user_id: userId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['stock_movements'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+export function useDeleteStockMovement() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (movementId) => {
+      const { error } = await supabase.rpc('delete_stock_movement', {
+        p_movement_id: movementId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['stock_movements'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}

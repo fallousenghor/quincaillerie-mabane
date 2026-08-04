@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { Plus, Trash2, Truck, Search, PackagePlus, Wallet, RotateCcw, CreditCard } from 'lucide-react'
+import { Plus, Trash2, Truck, Search, PackagePlus, Wallet, RotateCcw, CreditCard, Eye } from 'lucide-react'
 import { useProducts } from '../../hooks/useProducts'
 import { useSuppliers } from '../../hooks/useEntities'
 import { usePurchases, useCreatePurchase, useAddPurchasePayment, useCancelPurchase } from '../../hooks/usePurchases'
@@ -313,6 +313,7 @@ export default function Purchases() {
                         <td className="table-td"><StatusBadge status={p.status} /></td>
                         <td className="table-td">
                           <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                            <ActionButton icon={Eye} title="Voir le détail" onClick={() => setDetailPurchase(p)} />
                             {p.status !== 'annulee' && due > 0 && (
                               <ActionButton icon={CreditCard} title="Enregistrer un paiement" tone="emerald" onClick={() => { setPaymentOpen(p); setPaymentAmount(''); setPaymentError('') }} />
                             )}
@@ -358,6 +359,7 @@ export default function Purchases() {
                       <StatusBadge status={p.status} />
                     </div>
                     <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                      <ActionButton icon={Eye} title="Voir" onClick={() => setDetailPurchase(p)} />
                       {p.status !== 'annulee' && due > 0 && (
                         <ActionButton icon={CreditCard} title="Payer" tone="emerald" onClick={() => { setPaymentOpen(p); setPaymentAmount(''); setPaymentError('') }} />
                       )}
