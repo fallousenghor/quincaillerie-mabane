@@ -10,6 +10,7 @@ import {
   PackagePlus,
   Wallet,
   Settings,
+  MessageCircle,
   X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/fournisseurs', label: 'Fournisseurs', icon: Truck },
   { to: '/achats', label: 'Achats fournisseurs', icon: PackagePlus },
   { to: '/finances', label: 'Finances', icon: Wallet },
+  { to: '/chatbot', label: 'Chatbot', icon: MessageCircle },
   { to: '/parametres', label: 'Paramètres', icon: Settings },
 ]
 

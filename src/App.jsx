@@ -6,6 +6,7 @@ import Register from './pages/auth/Register'
 import Dashboard from './pages/dashboard/Dashboard'
 import Products from './pages/products/Products'
 import Categories from './pages/categories/Categories'
+import Chatbot from './pages/chat/Chatbot'
 import Clients from './pages/clients/Clients'
 import Suppliers from './pages/suppliers/Suppliers'
 import Purchases from './pages/purchases/Purchases'
@@ -39,6 +40,7 @@ export default function App() {
           <Route path="fournisseurs" element={<Suppliers />} />
           <Route path="achats" element={<Purchases />} />
           <Route path="finances" element={<Finances />} />
+          <Route path="chatbot" element={<Chatbot />} />
           <Route path="parametres" element={<Settings />} />
           <Route
             path="utilisateurs"
